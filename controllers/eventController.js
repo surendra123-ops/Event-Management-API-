@@ -1,5 +1,5 @@
-import Event from '../models/Event.js';
-import User from '../models/User.js';
+import Event from "../models/Event.js";
+import User from "../models/User.js";
 
 // Create Event
 export const createEvent = async (req, res, next) => {
@@ -16,18 +16,31 @@ export const createEvent = async (req, res, next) => {
       throw new Error("Capacity must be between 1 and 1000");
     }
 
+    
+    const existing = await Event.findOne({ title, dateTime, location });
+    if (existing) {
+      res.status(409); 
+      throw new Error("Event with same title, date, and location already exists");
+    }
+
     const event = new Event({ title, dateTime, location, capacity });
     const saved = await event.save();
+
     res.status(201).json({ message: "Event created", eventId: saved._id });
   } catch (err) {
     next(err);
   }
 };
 
+
 // Get Event Details
 export const getEventDetails = async (req, res, next) => {
   try {
-    const event = await Event.findById(req.params.id).populate('registrations');
+    const event = await Event.findById(req.params.id).populate({
+      path: "registrations",
+      select: "-password", 
+    });
+
     if (!event) {
       res.status(404);
       throw new Error("Event not found");
@@ -41,13 +54,19 @@ export const getEventDetails = async (req, res, next) => {
 // Register User for Event
 export const registerUser = async (req, res, next) => {
   try {
-    const { userId } = req.body;
-    const event = await Event.findById(req.params.id);
-    const user = await User.findById(userId);
+    const userId = req.user.userId;
+    const eventId = req.params.id;
 
-    if (!event || !user) {
+    const event = await Event.findById(eventId);
+    if (!event) {
       res.status(404);
-      throw new Error("Event or User not found");
+      throw new Error("Event not found");
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      res.status(404);
+      throw new Error("User not found");
     }
 
     if (new Date(event.dateTime) < new Date()) {
@@ -55,7 +74,7 @@ export const registerUser = async (req, res, next) => {
       throw new Error("Cannot register for past events");
     }
 
-    if (event.registrations.includes(userId)) {
+    if (event.registrations.some((id) => id.equals(userId))) {
       res.status(409);
       throw new Error("User already registered");
     }
@@ -65,8 +84,10 @@ export const registerUser = async (req, res, next) => {
       throw new Error("Event is full");
     }
 
+   
     event.registrations.push(userId);
     await event.save();
+
     res.status(200).json({ message: "Registration successful" });
   } catch (err) {
     next(err);
@@ -76,7 +97,7 @@ export const registerUser = async (req, res, next) => {
 // Cancel Registration
 export const cancelRegistration = async (req, res, next) => {
   try {
-    const { userId } = req.body;
+    const userId = req.user.userId;
     const event = await Event.findById(req.params.id);
 
     if (!event) {
@@ -89,7 +110,9 @@ export const cancelRegistration = async (req, res, next) => {
       throw new Error("User was not registered");
     }
 
-    event.registrations = event.registrations.filter(id => id.toString() !== userId);
+    event.registrations = event.registrations.filter(
+      (id) => id.toString() !== userId
+    );
     await event.save();
 
     res.status(200).json({ message: "Registration cancelled" });
@@ -104,22 +127,27 @@ export const listUpcomingEvents = async (req, res, next) => {
     const now = new Date();
 
     const events = await Event.find({
-      dateTime: { $gte: now }
+      dateTime: { $gte: now },
     }).sort({
-      dateTime: 1,      
-      location: 1      
+      dateTime: 1,
+      location: 1,
+    });
+    const seen = new Set();
+    const uniqueEvents = events.filter((event) => {
+      const key = `${event.title}-${event.dateTime}-${event.location}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
     });
 
-    res.status(200).json(events);
+    res.status(200).json(uniqueEvents);
   } catch (err) {
     console.error("Error fetching upcoming events:", err);
-    next(err); 
+    next(err);
   }
 };
 
 // Get Event Stats
-
-
 
 export const getEventStats = async (req, res, next) => {
   try {
@@ -131,18 +159,18 @@ export const getEventStats = async (req, res, next) => {
 
     const totalRegistrations = event.registrations.length;
     const remainingCapacity = event.capacity - totalRegistrations;
-    const percentageUsed = event.capacity > 0
-      ? Number(((totalRegistrations / event.capacity) * 100).toFixed(2))
-      : 0;
+    const percentageUsed =
+      event.capacity > 0
+        ? Number(((totalRegistrations / event.capacity) * 100).toFixed(2))
+        : 0;
 
     res.status(200).json({
       totalRegistrations,
       remainingCapacity,
-      percentageUsed: `${percentageUsed}%`
+      percentageUsed: `${percentageUsed}%`,
     });
   } catch (err) {
     console.error("Error in getEventStats:", err);
     next(err);
   }
 };
-

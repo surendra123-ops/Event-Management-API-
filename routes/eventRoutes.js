@@ -8,13 +8,15 @@ import {
   getEventStats
 } from '../controllers/eventController.js';
 
+import { protect } from '../middleware/authMiddleware.js';
+
 const router = express.Router();
 
-router.post('/', createEvent);
-router.get('/:id', getEventDetails);
-router.post('/:id/register', registerUser);
-router.post('/:id/cancel', cancelRegistration);
-router.get('/upcoming/all', listUpcomingEvents);
-router.get('/:id/stats', getEventStats);
+router.post('/', protect,createEvent);
+router.get('/:id',protect, getEventDetails);
+router.post('/:id/register',protect, registerUser);
+router.post('/:id/cancel',protect, cancelRegistration);
+router.get('/upcoming/all',protect, listUpcomingEvents);
+router.get('/:id/stats',protect, getEventStats);
 
 export default router;
