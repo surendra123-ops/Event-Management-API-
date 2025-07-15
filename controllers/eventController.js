@@ -134,7 +134,7 @@ export const listUpcomingEvents = async (req, res, next) => {
     });
     const seen = new Set();
     const uniqueEvents = events.filter((event) => {
-      const key = `${event.title}-${event.dateTime}-${event.location}`;
+      const key = `${event.title}-${event.dateTime.toISOString()}-${event.location}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
